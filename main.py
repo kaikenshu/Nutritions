@@ -16,6 +16,7 @@ from pymongo.server_api import ServerApi
 # uri1 = uri
 key = st.secrets["key"]
 uri = st.secrets["uri"]
+st.write(uri)
 client = MongoClient(uri, server_api=ServerApi('1'))
 
 client.admin.command('ping')
