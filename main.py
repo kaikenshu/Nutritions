@@ -18,14 +18,11 @@ key = st.secrets["key"]
 uri = st.secrets["uri"]
 client = MongoClient(uri, server_api=ServerApi('1'))
 
-try:
-    client.admin.command('ping')
-    print("Pinged your deployment. You successfully connected to MongoDB!")
-    db=client.get_database("db1")
-    ni=db.get_collection("Nutrition Information")
-    nt=db.get_collection("Nutrition Tracker")
-except Exception as e:
-    print(e)
+client.admin.command('ping')
+print("Pinged your deployment. You successfully connected to MongoDB!")
+db=client.get_database("db1")
+ni=db.get_collection("Nutrition Information")
+nt=db.get_collection("Nutrition Tracker")
 
 today_date = str(datetime.date.today())
 
