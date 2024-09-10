@@ -31,6 +31,7 @@ ni=db.get_collection("Nutrition Information")
 nt=db.get_collection("Nutrition Tracker")
 
 today_date = str(datetime.date.today(tzinfo=pytz.timezone("US/Pacific")))
+st.write(str(datetime.date.today().replace(tzinfo=pytz.utc)))
 
 #title
 st.write("Time to get jacked")
