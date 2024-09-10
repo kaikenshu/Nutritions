@@ -9,6 +9,10 @@ from openai import OpenAI
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 
+@st.cache_resource
+def init_client():
+    return MongoClient(uri, server_api=ServerApi('1'))
+
 # from temp.secrets import key, uri
 
 #secrets
@@ -17,7 +21,7 @@ from pymongo.server_api import ServerApi
 key = st.secrets["key"]
 uri = st.secrets["uri"]
 st.write(uri)
-client = MongoClient(uri, server_api=ServerApi('1'))
+client = init_client()
 
 client.admin.command('ping')
 print("Pinged your deployment. You successfully connected to MongoDB!")
