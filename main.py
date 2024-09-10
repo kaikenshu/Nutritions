@@ -30,13 +30,13 @@ db=client.get_database("db1")
 ni=db.get_collection("Nutrition Information")
 nt=db.get_collection("Nutrition Tracker")
 
-today_date = str(datetime.date.today(tzinfo=pytz.timezone("PST")))
+today_date = str(datetime.date.today(tzinfo=pytz.timezone("US/Pacific")))
 
 #title
 st.write("Time to get jacked")
 
 #tracker
-ntd = nt.find({"Date":{"$gt":str(datetime.date.today(tzinfo=pytz.timezone("PST"))-datetime.timedelta(days=5))}})
+ntd = nt.find({"Date":{"$gt":str(datetime.date.today(tzinfo=pytz.timezone("US/Pacific"))-datetime.timedelta(days=5))}})
 df = pd.DataFrame(list(ntd))
 st.write(df)
 # df=st.data_editor(df0)
