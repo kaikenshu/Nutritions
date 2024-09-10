@@ -30,7 +30,7 @@ db=client.get_database("db1")
 ni=db.get_collection("Nutrition Information")
 nt=db.get_collection("Nutrition Tracker")
 
-today_date = str(datetime.date.today(tzinfo=pytz.timezone("US/Pacific")))
+today_date = str(datetime.date.today()))
 st.write(str(datetime.date.today().replace(tzinfo=pytz.utc)))
 
 #title
