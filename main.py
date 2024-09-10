@@ -1,77 +1,136 @@
-from unittest.mock import inplace
+import json
 
 import streamlit as st
 import pandas as pd
-import os
-from datetime import datetime
+import datetime
 
-#CSV
-today = datetime.now().strftime('%m/%d/%Y')
-today_date = pd.to_datetime(today, format='%m/%d/%Y')
+from bson import ObjectId
+from openai import OpenAI
+from pymongo import MongoClient
+from pymongo.server_api import ServerApi
+
+# from temp.secrets import key, uri
+
+#secrets
+# key1 = key
+# uri1 = uri
+key = st.secrets["key"]
+uri = st.secrets["uri"]
+client = MongoClient(uri, server_api=ServerApi('1'))
+
+try:
+    client.admin.command('ping')
+    print("Pinged your deployment. You successfully connected to MongoDB!")
+    db=client.get_database("db1")
+    ni=db.get_collection("Nutrition Information")
+    nt=db.get_collection("Nutrition Tracker")
+except Exception as e:
+    print(e)
+
+today_date = str(datetime.date.today())
 
 #title
 st.write("Time to get jacked")
 
-#CSV
-df0=pd.read_csv(filepath_or_buffer="./df.csv")
-df=st.data_editor(df0)
-df['Date'] = pd.to_datetime(df['Date'], format='%m/%d/%Y')
-
-if st.button(label="Save"):
-    df.to_csv("df.csv",index=False)
+#tracker
+ntd = nt.find({"Date":{"$gt":str(datetime.date.today()-datetime.timedelta(days=5))}})
+df = pd.DataFrame(list(ntd))
+st.write(df)
+# df=st.data_editor(df0)
+# if st.button(label="Save"):
+#     df.to_csv("df.csv",index=False)
 
 #select food
-data=pd.read_csv("data.csv")
-dropdown=st.selectbox(label="Food",options=data["Food"],placeholder=" ")
-st.write(data[data["Food"]==dropdown])
-
+nid = ni.find({})
+data=pd.DataFrame(list(nid))
+dropdown=st.selectbox(label="Food",options=data["Food"],index=list(data["Food"]).index(" "))
+foodeditor=st.data_editor(data[data["Food"]==dropdown])
+if st.button(label="Save"):
+    # st.write(foodeditor.to_json(orient="records"))
+    editedfood=json.loads(foodeditor.to_json(orient="records"))[0]
+    id=editedfood["_id"]
+    del editedfood["_id"]
+    ni.replace_one({"_id":ObjectId(id)},editedfood)
+    st.write("Done!")
 #select quantity
-quantity=st.number_input(label="Quantity",min_value=0.01)
+quantity=st.number_input(label="Quantity",min_value=0.1,placeholder=" ",value=None)
 
+#choose from dropdown
 if st.button(label="Update"):
-    if dropdown == " ":
-        st.write("empty string")
+    if dropdown == " " or quantity==None:
+        st.write("Missing info")
     else:
         dftemp = data[data["Food"] == dropdown]
         dftemp[["Calories","Fat","Carbs","Protein","Fiber"]] = dftemp[["Calories","Fat","Carbs","Protein","Fiber"]].apply(lambda x: float(x) * quantity)
         st.write(dftemp)
 
         if today_date in df['Date'].values:
-            dftemp2=df[df["Date"] == today_date]
-            dftemp2["Calories"] = dftemp2["Calories"].apply(lambda x: float(x)+float(dftemp["Calories"]))
-            dftemp2["Fat"] = dftemp2["Fat"].apply(lambda x: float(x) + float(dftemp["Fat"]))
-            dftemp2["Carbs"] = dftemp2["Carbs"].apply(lambda x: float(x) + float(dftemp["Carbs"]))
-            dftemp2["Protein"] = dftemp2["Protein"].apply(lambda x: float(x) + float(dftemp["Protein"]))
-            dftemp2["Fiber"] = dftemp2["Fiber"].apply(lambda x: float(x) + float(dftemp["Fiber"]))
-            df[df["Date"] == today_date]=dftemp2[dftemp2["Date"] == today_date]
-            st.write(df)
+            todaydata=nt.find_one({"Date":today_date})
+            fooditem=ni.find_one({"Food":dropdown})
+            todaydata["Calories"]+=quantity*fooditem["Calories"]
+            todaydata["Fat"]+=quantity*fooditem["Fat"]
+            todaydata["Carbs"] +=quantity*fooditem["Carbs"]
+            todaydata["Protein"] +=quantity*fooditem["Protein"]
+            todaydata["Fiber"] +=quantity*fooditem["Fiber"]
+            fooditem["Quantity"]=quantity
+            todaydata["Consumption"].append(fooditem)
+            # st.write(pd.DataFrame([todaydata]))
+            nt.replace_one({"_id":ObjectId(nt.find_one({"Date":today_date})["_id"])},todaydata)
+            st.write(nt.find_one({"Date":today_date}))
 
         else:
-            new_row = [
-                today_date,
-                float(dftemp["Calories"]),
-                float(dftemp["Fat"]),
-                float(dftemp["Carbs"]),
-                float(dftemp["Protein"]),
-                float(dftemp["Fiber"]),
-            ]
-            df.loc[len(df.index)] = new_row
-            st.write(df)
+            todaydata={"Date":today_date}
+            fooditem=ni.find_one({"Food":dropdown})
+            todaydata["Calories"]=quantity*fooditem["Calories"]
+            todaydata["Fat"]=quantity*fooditem["Fat"]
+            todaydata["Carbs"]=quantity*fooditem["Carbs"]
+            todaydata["Protein"]=quantity*fooditem["Protein"]
+            todaydata["Fiber"]=quantity*fooditem["Fiber"]
+            fooditem["Quantity"]=quantity
+            todaydata["Consumption"]=[fooditem]
+            nt.insert_one(todaydata)
+            st.write(nt.find_one({"Date":today_date}))
 
-        # df.to_csv("df.csv", index=False)
+#add a new food item
+st.session_state["newfood"] = st.text_input(label="Enter new food and quantity")
+if st.button(label="Ask"):
+    st.session_state["AskB"]=True
+if st.session_state.get("AskB",False):
+    if st.session_state["newfood"]==None or len(st.session_state["newfood"].strip())==0:
+        st.write("Empty input")
+    else:
+        client = OpenAI(
 
-#Uploader
-tracker=st.file_uploader("Upload a tracker",type="csv")
-if tracker is not None:
-    file=open("data.csv","w")
-#currently x.decode() does not support non-English characters
-    file.writelines([x.decode("utf-8") for x in tracker.readlines()])
-    file.close()
+            api_key=key,
+        )
+
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "user",
+                    "content": f'provide nutrition information for {st.session_state["newfood"]} in a json dictionary without formating, with "Food"(value={st.session_state["newfood"]}) and "Calories", "Fat", "Carbs", "Protein" and "Fiber" (meaning soluble fiber) in float with 1 decimal place and no other words'
+                }
+            ],
+            model="gpt-4o",
+        )
+        gptresponse=chat_completion.choices[0].message.content
+        st.write(gptresponse)
+        st.write("Does this look okay?")
+        if st.button(label="Confirm"):
+            ni.insert_one(json.loads(gptresponse))
+            st.write("Done!")
+
+#Update the nutrition tracker
 
 
-"""
-To DO list:
-incorporate session state wherever needed
-storage => getpantry
-"""
+
+#         # df.to_csv("df.csv", index=False)
+#
+# #Uploader
+# tracker=st.file_uploader("Upload a tracker",type="csv")
+# if tracker is not None:
+#     file=open("data.csv","w")
+# #currently x.decode() does not support non-English characters
+#     file.writelines([x.decode("utf-8") for x in tracker.readlines()])
+#     file.close()
 
