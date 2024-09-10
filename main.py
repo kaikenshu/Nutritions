@@ -8,6 +8,7 @@ from bson import ObjectId
 from openai import OpenAI
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
+import pytz
 
 @st.cache_resource
 def init_client():
@@ -20,7 +21,7 @@ def init_client():
 # uri1 = uri
 key = st.secrets["key"]
 uri = st.secrets["uri"]
-st.write(uri)
+
 client = init_client()
 
 client.admin.command('ping')
@@ -29,13 +30,13 @@ db=client.get_database("db1")
 ni=db.get_collection("Nutrition Information")
 nt=db.get_collection("Nutrition Tracker")
 
-today_date = str(datetime.date.today())
+today_date = str(datetime.date.today(tzinfo=pytz.timezone("PST")))
 
 #title
 st.write("Time to get jacked")
 
 #tracker
-ntd = nt.find({"Date":{"$gt":str(datetime.date.today()-datetime.timedelta(days=5))}})
+ntd = nt.find({"Date":{"$gt":str(datetime.date.today(tzinfo=pytz.timezone("PST"))-datetime.timedelta(days=5))}})
 df = pd.DataFrame(list(ntd))
 st.write(df)
 # df=st.data_editor(df0)
