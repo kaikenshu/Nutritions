@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import numpy as np
 from bson import ObjectId
 from openai import OpenAI
@@ -15,10 +16,11 @@ import pytz
 def init_client():
     return MongoClient(uri, server_api=ServerApi('1'))
 
-#toggle
+#toggle on for testing
 # from temp.keys import key, uri
 # key1 = key
 # uri1 = uri
+#toggle on for production
 key = st.secrets["key"]
 uri = st.secrets["uri"]
 
@@ -137,7 +139,127 @@ if st.button(label="Add"):
             nt.insert_one(todaydata)
             st.write("Done!")
 
-#add a new food item
+#-----------------daily goals by ChatGPT--------------------------
+# Function to create the circular progress chart
+def plot_progress(current_value, max_value, color):
+    fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
+
+    # Calculate percentage completion
+    percent = current_value / max_value
+
+    # Create the outer ring (full circle)
+    ax.pie([percent, 1 - percent], startangle=90, colors=[color, 'darkgray'],
+           radius=1.2, wedgeprops=dict(width=0.3))
+
+    # Add text to the center
+    ax.text(0, 0, f'{int(percent * 100)}%', ha='center', va='center', fontsize=20, fontweight='bold', color='white')
+    ax.text(-0.6, -0.4, f'{int(current_value)}', ha='center', va='center', fontsize=12, fontweight='bold', color='white')
+
+    # Remove the axes
+    ax.set_aspect('equal')
+    plt.axis('off')  # Hide the background axis
+
+    return fig
+
+
+# Example usage in Streamlit:
+st.write("Daily Nutritional Progress")
+
+# Input values (you can replace these with your actual data)
+current_calories = float(df[df['Date'] == today_date]["Calories"]) # Calorie intake for the day
+calorie_goal = 3000  # Calorie goal for the day
+
+current_protein = float(df[df['Date'] == today_date]["Protein"])  # Protein intake for the day
+protein_goal = 200  # Protein goal for the day
+
+current_fiber = float(df[df['Date'] == today_date]["Fiber"])  # Fiber intake for the day
+fiber_goal = 30  # Fiber goal for the day
+
+# Colors for each nutrient
+calorie_color = '#9b5de5'  # Purple for calories
+protein_color = '#ff66b3'  # Pink for protein
+fiber_color = '#4cc9f0'  # Blue for fiber
+
+# Create the charts for calories, protein, and fiber
+fig_calories = plot_progress(current_calories, calorie_goal, calorie_color)
+fig_protein = plot_progress(current_protein, protein_goal, protein_color)
+fig_fiber = plot_progress(current_fiber, fiber_goal, fiber_color)
+
+# Display all charts side by side in Streamlit
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.write("Calories")
+    st.pyplot(fig_calories)
+
+with col2:
+    st.write("Protein")
+    st.pyplot(fig_protein)
+
+with col3:
+    st.write("Fiber")
+    st.pyplot(fig_fiber)
+
+#---------------plotting by ChatGPT-------------------------
+st.write(" ")
+st.write("Trends")
+# If there's data
+if past_data:
+    dfp = pd.DataFrame(past_data)
+    dfp.set_index('Date', inplace=True)  # Assuming Date field exists and is formatted correctly
+    dfp.index = pd.to_datetime(dfp.index)  # Ensure the Date index is in datetime format
+else:
+    st.error("No data available for the last 30 days.")
+    dfp = pd.DataFrame(columns=['Date', 'Cal7', 'Fat7', 'Car7', 'Pro7', 'Fib7'])  # Empty DataFrame for safety
+
+# Plotting
+fig, ax1 = plt.subplots(figsize=(10, 6))
+
+# Set dark background color for the figure and axes
+fig.patch.set_facecolor('black')  # Set figure background color
+ax1.set_facecolor('black')  # Set axes background color
+
+# Plot Fat, Carbs, Protein (7-day averages) as line graphs
+ax1.plot(dfp.index, dfp['Fat7'], label='Fat (g)', color='#ffcc00', linestyle='-', marker='o', markersize=8, alpha=0.8)
+ax1.plot(dfp.index, dfp['Car7'], label='Carbs (g)', color='#2a9d8f', linestyle='-', marker='o', markersize=8, alpha=0.8)
+ax1.plot(dfp.index, dfp['Pro7'], label='Protein (g)', color='#e63946', linestyle='-', marker='o', markersize=8, alpha=0.8)
+
+# Set labels for the first y-axis
+ax1.set_ylabel('Grams (g)', fontsize=12)
+ax1.set_xlabel('Date', fontsize=12)
+ax1.set_ylim([0, 400])
+
+# Customize ticks and grid
+ax1.tick_params(axis='x', rotation=45, colors='white')
+ax1.tick_params(axis='y', colors='white')
+ax1.grid(True, linestyle='--', alpha=0.3)
+
+# Create a second y-axis for Calories (bars)
+ax2 = ax1.twinx()
+ax2.bar(dfp.index, dfp['Cal7'], label='Calories (kcal)', color='dimgrey', alpha=0.6, width=0.05)
+ax2.set_ylim([0, 4500])
+
+# Set y-axis label
+ax2.set_ylabel('Calories (kcal)', fontsize=12)
+
+# Set color for second y-axis ticks
+ax2.tick_params(axis='y', colors='white')
+
+# Plot Fiber as scatter plot (dots), scaling the size of the dots based on fiber intake
+fiber_sizes = dfp['Fib7'] / 45 * 100  # Scaling fiber sizes (0-45g mapped to 0-100 size)
+ax1.scatter(dfp.index, dfp['Fib7'], label='Fiber (g)', color='#9b5de5', s=fiber_sizes, alpha=0.7)
+
+# Add legends with transparent backgrounds
+ax1.legend(loc='upper left', frameon=False)
+ax2.legend(loc='upper right', frameon=False)
+
+# Tighten layout
+plt.tight_layout()
+
+# Ensure background color is saved correctly
+st.pyplot(fig)
+
+#---------------------------add a new food item-------------------------------
 st.session_state["newfood"] = st.text_input(label="Enter new food and quantity")
 if st.button(label="Ask"):
     st.session_state["AskB"]=True
@@ -166,37 +288,45 @@ if st.session_state.get("AskB",False):
             ni.insert_one(json.loads(gptresponse))
             st.write("Done!")
 
-#---------------plotting by ChatGPT-------------------------
-# Convert MongoDB data into a pandas DataFrame
-if past_data:
-    dfp = pd.DataFrame(past_data)
-    dfp.set_index('Date', inplace=True)  # Assuming Date field exists and is formatted correctly
-    dfp.index = pd.to_datetime(dfp.index)  # Ensure the Date index is in datetime format
-    # Assuming that the fields 'Cal7', 'Fat7', 'Car7', 'Pro7', and 'Fib7' exist in the documents
-else:
-    st.error("No data available for the last 30 days.")
-    dfp = pd.DataFrame(columns=['Date', 'Cal7', 'Fat7', 'Car7', 'Pro7', 'Fib7'])  # Empty DataFrame for safety
-# Plotting
-fig, ax1 = plt.subplots(figsize=(10, 6))
-# Plot Fat, Carbs, Protein (7-day averages) as line graphs
-ax1.plot(dfp.index, dfp['Fat7'], label='Fat (g)', color='orange', linestyle='-', marker='o')
-ax1.plot(dfp.index, dfp['Car7'], label='Carbs (g)', color='green', linestyle='-', marker='o')
-ax1.plot(dfp.index, dfp['Pro7'], label='Protein (g)', color='red', linestyle='-', marker='o')
-# Set labels for the first y-axis
-ax1.set_ylabel('Grams (g)', fontsize=12)
-ax1.set_xlabel('Date', fontsize=12)
-ax1.legend(loc='upper left')
-ax1.tick_params(axis='x', rotation=45)
-# Create a second y-axis for Calories (bars)
-ax2 = ax1.twinx()
-ax2.bar(dfp.index, dfp['Cal7'], label='Calories (kcal)', color='darkblue', alpha=0.6, width=0.7)
-ax2.set_ylabel('Calories (kcal)', fontsize=12)
-# Plot Fiber as scatter plot (dots), scaling the size of the dots based on fiber intake
-fiber_sizes = dfp['Fib7'] / 45 * 100  # Scaling fiber sizes (0-45g mapped to 0-100 size)
-ax1.scatter(dfp.index, dfp['Fib7'], label='Fiber (g)', color='purple', s=fiber_sizes, alpha=0.7)
-# Show legends for both axes
-ax1.legend(loc='upper left')
-ax2.legend(loc='upper right')
-# Show the plot in Streamlit
-st.pyplot(fig)
 
+
+
+
+#----------------------------ideas for future------------------------------------
+#---------------add a new food with image--------------------
+# File uploader for any type of file
+# uploaded_file = st.file_uploader("Or, upload an image of the nutrition facts")
+#
+# # Text input for the prompt
+# st.session_state["foodname"] = st.text_input(label="Food name:")
+# if st.button(label="Let's go!"):
+#     st.session_state["LG"]=True
+# if st.session_state.get("LG",False):
+#     # Check if both file and prompt are provided
+#     if uploaded_file is not None:
+#         if st.session_state["foodname"] == None or len(st.session_state["foodname"].strip()) == 0:
+#             st.write("Empty input")
+#         else:
+#             client = OpenAI(
+#
+#                 api_key=key,
+#             )
+#             # Read the file's contents (depending on its type, e.g., text)
+#             file_contents = uploaded_file.read()
+#
+#             # Create a message combining the prompt and file content
+#             full_prompt = f'provide nutrition information based on the uploaded image, in a json dictionary without formating, with "Food"(value={st.session_state["foodname"]}) and "Calories", "Fat", "Carbs", "Protein" and "Fiber" (meaning soluble fiber) in float with 1 decimal place and no other words\n\nFile content:\n{file_contents}'
+#
+#             # Send the prompt with file content to ChatGPT using the OpenAI API
+#             response = client.chat.completions.create(
+#                 model="gpt-4o-mini",
+#                 messages=[
+#                     {"role": "user", "content": full_prompt},
+#                 ]
+#             )
+#             gptresponse = response.choices[0].message.content
+#             st.write(gptresponse)
+#             st.write("Does this look okay?")
+#             if st.button(label="Confirm"):
+#                 ni.insert_one(json.loads(gptresponse))
+#                 st.write("Done!")
