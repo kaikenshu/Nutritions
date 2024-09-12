@@ -103,40 +103,27 @@ if st.button(label="Add"):
             fooditem["Quantity"]=quantity
             todaydata["Consumption"]=[fooditem["Food"],fooditem["Quantity"]]
 #-----------------by ChatGPT------------------------
-            if past_data:
-                # Convert to DataFrame for easier rolling calculation
-                df = pd.DataFrame(past_data)
-                df.set_index('Date', inplace=True)
-                # Calculate 7-day rolling averages excluding the current day
-                rolling_avg_7 = \
-                df[['Calories', 'Fat', 'Carbs', 'Protein', 'Fiber']].rolling(window=7, min_periods=1).mean().iloc[-1]
-                # Calculate 30-day rolling averages excluding the current day
-                rolling_avg_30 = \
-                df[['Calories', 'Fat', 'Carbs', 'Protein', 'Fiber']].rolling(window=30, min_periods=1).mean().iloc[-1]
-                # Add rolling averages to today's data with new column names
-                todaydata["Cal7"] = rolling_avg_7["Calories"]
-                todaydata["Fat7"] = rolling_avg_7["Fat"]
-                todaydata["Car7"] = rolling_avg_7["Carbs"]
-                todaydata["Pro7"] = rolling_avg_7["Protein"]
-                todaydata["Fib7"] = rolling_avg_7["Fiber"]
-                todaydata["Cal30"] = rolling_avg_30["Calories"]
-                todaydata["Fat30"] = rolling_avg_30["Fat"]
-                todaydata["Car30"] = rolling_avg_30["Carbs"]
-                todaydata["Pro30"] = rolling_avg_30["Protein"]
-                todaydata["Fib30"] = rolling_avg_30["Fiber"]
-            else:
-                # If no past data exists, set rolling averages to None (instead of current day's values)
-                todaydata["Cal7"] = None
-                todaydata["Fat7"] = None
-                todaydata["Car7"] = None
-                todaydata["Pro7"] = None
-                todaydata["Fib7"] = None
-                todaydata["Cal30"] = None
-                todaydata["Fat30"] = None
-                todaydata["Car30"] = None
-                todaydata["Pro30"] = None
-                todaydata["Fib30"] = None
-
+            # Convert to DataFrame for easier rolling calculation
+            dfc = pd.DataFrame(past_data)
+            dfc.set_index('Date', inplace=True)
+            # Calculate 7-day rolling averages excluding the current day
+            rolling_avg_7 = \
+            dfc[['Calories', 'Fat', 'Carbs', 'Protein', 'Fiber']].rolling(window=7, min_periods=1).mean().iloc[-1]
+            # Calculate 30-day rolling averages excluding the current day
+            rolling_avg_30 = \
+            dfc[['Calories', 'Fat', 'Carbs', 'Protein', 'Fiber']].rolling(window=30, min_periods=1).mean().iloc[-1]
+            # Add rolling averages to today's data with new column names
+            todaydata["Cal7"] = rolling_avg_7["Calories"]
+            todaydata["Fat7"] = rolling_avg_7["Fat"]
+            todaydata["Car7"] = rolling_avg_7["Carbs"]
+            todaydata["Pro7"] = rolling_avg_7["Protein"]
+            todaydata["Fib7"] = rolling_avg_7["Fiber"]
+            todaydata["Cal30"] = rolling_avg_30["Calories"]
+            todaydata["Fat30"] = rolling_avg_30["Fat"]
+            todaydata["Car30"] = rolling_avg_30["Carbs"]
+            todaydata["Pro30"] = rolling_avg_30["Protein"]
+            todaydata["Fib30"] = rolling_avg_30["Fiber"]
+#uncomment
             nt.insert_one(todaydata)
             st.write("Done!")
 
@@ -167,43 +154,50 @@ def plot_progress(current_value, max_value, color):
 
 # Example usage in Streamlit:
 st.write("Daily Nutritional Progress")
+#delete
+# st.write(df)
+# st.write(df.columns)
+# st.write(df["Date"])
+# st.write(df['Date'] == today_date)
+# st.write(df[df['Date'] == today_date].empty)
+if not df[df['Date'] == today_date].empty:
+# if df["Date"].astype(str).str.contains(today_date):
+    # Input values (you can replace these with your actual data)
+    current_calories = float(df[df['Date'] == today_date]["Calories"]) # Calorie intake for the day
+    calorie_goal = 3000  # Calorie goal for the day
 
-# Input values (you can replace these with your actual data)
-current_calories = float(df[df['Date'] == today_date]["Calories"]) # Calorie intake for the day
-calorie_goal = 3000  # Calorie goal for the day
+    current_protein = float(df[df['Date'] == today_date]["Protein"])  # Protein intake for the day
+    protein_goal = 200  # Protein goal for the day
 
-current_protein = float(df[df['Date'] == today_date]["Protein"])  # Protein intake for the day
-protein_goal = 200  # Protein goal for the day
+    current_fiber = float(df[df['Date'] == today_date]["Fiber"])  # Fiber intake for the day
+    fiber_goal = 30  # Fiber goal for the day
 
-current_fiber = float(df[df['Date'] == today_date]["Fiber"])  # Fiber intake for the day
-fiber_goal = 30  # Fiber goal for the day
+    # Colors for each nutrient
+    calorie_color = '#9b5de5'  # Purple for calories
+    protein_color = '#ff66b3'  # Pink for protein
+    fiber_color = '#4cc9f0'  # Blue for fiber
 
-# Colors for each nutrient
-calorie_color = '#9b5de5'  # Purple for calories
-protein_color = '#ff66b3'  # Pink for protein
-fiber_color = '#4cc9f0'  # Blue for fiber
+    # Create the charts for calories, protein, and fiber
+    fig_calories = plot_progress(current_calories, calorie_goal, calorie_color)
+    fig_protein = plot_progress(current_protein, protein_goal, protein_color)
+    fig_fiber = plot_progress(current_fiber, fiber_goal, fiber_color)
 
-# Create the charts for calories, protein, and fiber
-fig_calories = plot_progress(current_calories, calorie_goal, calorie_color)
-fig_protein = plot_progress(current_protein, protein_goal, protein_color)
-fig_fiber = plot_progress(current_fiber, fiber_goal, fiber_color)
+    # Display all charts side by side in Streamlit
+    # col1, col2, col3 = st.columns(3)
+    with st.container():
+        col1, col2, col3 = st.columns([1, 1, 1])  # Equally sized columns
 
-# Display all charts side by side in Streamlit
-# col1, col2, col3 = st.columns(3)
-with st.container():
-    col1, col2, col3 = st.columns([1, 1, 1])  # Equally sized columns
+    with col1:
+        st.write("Calories")
+        st.pyplot(fig_calories)
 
-with col1:
-    st.write("Calories")
-    st.pyplot(fig_calories)
+    with col2:
+        st.write("Protein")
+        st.pyplot(fig_protein)
 
-with col2:
-    st.write("Protein")
-    st.pyplot(fig_protein)
-
-with col3:
-    st.write("Fiber")
-    st.pyplot(fig_fiber)
+    with col3:
+        st.write("Fiber")
+        st.pyplot(fig_fiber)
 
 #---------------plotting by ChatGPT-------------------------
 st.write(" ")
