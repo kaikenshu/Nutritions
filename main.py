@@ -1,3 +1,4 @@
+import base64
 import json
 
 import streamlit as st
@@ -144,6 +145,8 @@ if st.button(label="Add"):
 def plot_progress(current_value, max_value, color):
     fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
 
+    fig.patch.set_facecolor('black')  # Set the figure background color
+    ax.set_facecolor('black')  # Set the axes background color
     # Calculate percentage completion
     percent = current_value / max_value
 
@@ -186,7 +189,9 @@ fig_protein = plot_progress(current_protein, protein_goal, protein_color)
 fig_fiber = plot_progress(current_fiber, fiber_goal, fiber_color)
 
 # Display all charts side by side in Streamlit
-col1, col2, col3 = st.columns(3)
+# col1, col2, col3 = st.columns(3)
+with st.container():
+    col1, col2, col3 = st.columns([1, 1, 1])  # Equally sized columns
 
 with col1:
     st.write("Calories")
@@ -250,8 +255,8 @@ fiber_sizes = dfp['Fib7'] / 45 * 100  # Scaling fiber sizes (0-45g mapped to 0-1
 ax1.scatter(dfp.index, dfp['Fib7'], label='Fiber (g)', color='#9b5de5', s=fiber_sizes, alpha=0.7)
 
 # Add legends with transparent backgrounds
-ax1.legend(loc='upper left', frameon=False)
-ax2.legend(loc='upper right', frameon=False)
+ax1.legend(loc='upper left', frameon=False, labelcolor='white')
+ax2.legend(loc='upper right', frameon=False, labelcolor='white')
 
 # Tighten layout
 plt.tight_layout()
@@ -313,13 +318,21 @@ if st.session_state.get("AskB",False):
 #             )
 #             # Read the file's contents (depending on its type, e.g., text)
 #             file_contents = uploaded_file.read()
+#             file_base64 = base64.b64encode(file_contents).decode('utf-8')
 #
 #             # Create a message combining the prompt and file content
-#             full_prompt = f'provide nutrition information based on the uploaded image, in a json dictionary without formating, with "Food"(value={st.session_state["foodname"]}) and "Calories", "Fat", "Carbs", "Protein" and "Fiber" (meaning soluble fiber) in float with 1 decimal place and no other words\n\nFile content:\n{file_contents}'
+#             full_prompt = f'''
+#             Provide nutrition information based on the uploaded image (base64 encoded), in a JSON dictionary without formatting, with:
+#             - "Food" (value = {st.session_state["foodname"]})
+#             - "Calories", "Fat", "Carbs", "Protein", and "Fiber" (meaning soluble fiber) in float with 1 decimal place and no other words.
+#
+#             Image (base64):
+#             {file_base64}
+#             '''
 #
 #             # Send the prompt with file content to ChatGPT using the OpenAI API
 #             response = client.chat.completions.create(
-#                 model="gpt-4o-mini",
+#                 model="gpt-4o",
 #                 messages=[
 #                     {"role": "user", "content": full_prompt},
 #                 ]
@@ -330,3 +343,4 @@ if st.session_state.get("AskB",False):
 #             if st.button(label="Confirm"):
 #                 ni.insert_one(json.loads(gptresponse))
 #                 st.write("Done!")
+#--------------------------------------------------------------------------------------------------------------
