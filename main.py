@@ -1,6 +1,7 @@
 import base64
 import json
 
+import requests
 import streamlit as st
 import pandas as pd
 import datetime
@@ -13,17 +14,20 @@ from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 import pytz
 
+from temp.keys import imgur_client_id
+
+
 @st.cache_resource
 def init_client():
     return MongoClient(uri, server_api=ServerApi('1'))
 
 #toggle on for testing
-# from temp.keys import key, uri
-# key1 = key
-# uri1 = uri
+# from temp.keys import key, uri, imgur_client_id
+
 #toggle on for production
 key = st.secrets["key"]
 uri = st.secrets["uri"]
+imgur_client_id = st.secrets["imgur_client_id"]
 
 client = init_client()
 
@@ -31,7 +35,10 @@ client.admin.command('ping')
 db=client.get_database("db1")
 ni=db.get_collection("Nutrition Information")
 nt=db.get_collection("Nutrition Tracker")
+pr = db.get_collection("Presets")
 past_data = list(nt.find().sort("Date", -1).limit(30))
+prd = pr.find({})
+prdata=pd.DataFrame(list(prd))
 
 #timezone
 today_date = datetime.datetime.now(pytz.timezone("US/Pacific")).strftime("%Y-%m-%d")
@@ -63,12 +70,11 @@ dropdown=st.selectbox(label="Food",options=data["Food"],index=list(data["Food"])
 foodeditor=st.data_editor(data[data["Food"]==dropdown].iloc[:, 1:].set_index('Food'))
 if st.button(label="Update"):
     editedfood=json.loads(foodeditor.to_json(orient="records"))[0]
-    id=editedfood["_id"]
-    del editedfood["_id"]
-    ni.replace_one({"_id":ObjectId(id)},editedfood)
+    editedfood["Food"] = dropdown
+    ni.replace_one({"Food":dropdown},editedfood)
     st.write("Done!")
 #select quantity
-quantity=st.number_input(label="Quantity",min_value=0.1,placeholder=" ",value=None)
+quantity=st.number_input(label="Quantity",min_value=-5000.1,placeholder=" ",value=None)
 
 #choose from dropdown
 if st.button(label="Add"):
@@ -88,7 +94,6 @@ if st.button(label="Add"):
             todaydata["Fiber"] +=quantity*fooditem["Fiber"]
             fooditem["Quantity"]=quantity
             todaydata["Consumption"].append([fooditem["Food"],fooditem["Quantity"]])
-            # st.write(pd.DataFrame([todaydata]))
             nt.replace_one({"_id":ObjectId(nt.find_one({"Date":today_date})["_id"])},todaydata)
             st.write("Done!")
 
@@ -101,7 +106,8 @@ if st.button(label="Add"):
             todaydata["Protein"]=quantity*fooditem["Protein"]
             todaydata["Fiber"]=quantity*fooditem["Fiber"]
             fooditem["Quantity"]=quantity
-            todaydata["Consumption"]=[fooditem["Food"],fooditem["Quantity"]]
+            todaydata["Consumption"]=[[fooditem["Food"],fooditem["Quantity"]]]
+
 #-----------------by ChatGPT------------------------
             # Convert to DataFrame for easier rolling calculation
             dfc = pd.DataFrame(past_data)
@@ -123,17 +129,11 @@ if st.button(label="Add"):
             todaydata["Car30"] = rolling_avg_30["Carbs"]
             todaydata["Pro30"] = rolling_avg_30["Protein"]
             todaydata["Fib30"] = rolling_avg_30["Fiber"]
-#uncomment
             nt.insert_one(todaydata)
             st.write("Done!")
 
 #-----------------daily goals by ChatGPT--------------------------
-# Function to create the circular progress chart
-def plot_progress(current_value, max_value, color):
-    fig, ax = plt.subplots(figsize=(4, 4), dpi=100)
-
-    fig.patch.set_facecolor('black')  # Set the figure background color
-    ax.set_facecolor('black')  # Set the axes background color
+def plot_progress(current_value, max_value, color, ax):
     # Calculate percentage completion
     percent = current_value / max_value
 
@@ -143,34 +143,29 @@ def plot_progress(current_value, max_value, color):
 
     # Add text to the center
     ax.text(0, 0, f'{int(percent * 100)}%', ha='center', va='center', fontsize=20, fontweight='bold', color='white')
-    ax.text(-0.6, -0.4, f'{int(current_value)}', ha='center', va='center', fontsize=12, fontweight='bold', color='white')
+    ax.text(0, -0.3, f'({int(current_value)} / {max_value})', ha='center', va='center', fontsize=15, fontweight='bold', color='white')
 
-    # Remove the axes
+    # Set background color and remove axis
+    ax.set_facecolor('black')  # Set the axes background color
     ax.set_aspect('equal')
-    plt.axis('off')  # Hide the background axis
-
-    return fig
-
+    ax.axis('off')  # Hide the background axis
 
 # Example usage in Streamlit:
 st.write("Daily Nutritional Progress")
-#delete
-# st.write(df)
-# st.write(df.columns)
-# st.write(df["Date"])
-# st.write(df['Date'] == today_date)
-# st.write(df[df['Date'] == today_date].empty)
 if not df[df['Date'] == today_date].empty:
+    Calories_value = prdata.loc[prdata['Name'] == 'Preset', 'Calories'].values[0]
+    protein_value = prdata.loc[prdata['Name'] == 'Preset', 'Protein'].values[0]
+    Fiber_value = prdata.loc[prdata['Name'] == 'Preset', 'Fiber'].values[0]
 # if df["Date"].astype(str).str.contains(today_date):
     # Input values (you can replace these with your actual data)
     current_calories = float(df[df['Date'] == today_date]["Calories"]) # Calorie intake for the day
-    calorie_goal = 3000  # Calorie goal for the day
+    calorie_goal = Calories_value  # Calorie goal for the day
 
     current_protein = float(df[df['Date'] == today_date]["Protein"])  # Protein intake for the day
-    protein_goal = 200  # Protein goal for the day
+    protein_goal = protein_value  # Protein goal for the day
 
     current_fiber = float(df[df['Date'] == today_date]["Fiber"])  # Fiber intake for the day
-    fiber_goal = 30  # Fiber goal for the day
+    fiber_goal = Fiber_value  # Fiber goal for the day
 
     # Colors for each nutrient
     calorie_color = '#9b5de5'  # Purple for calories
@@ -178,26 +173,58 @@ if not df[df['Date'] == today_date].empty:
     fiber_color = '#4cc9f0'  # Blue for fiber
 
     # Create the charts for calories, protein, and fiber
-    fig_calories = plot_progress(current_calories, calorie_goal, calorie_color)
-    fig_protein = plot_progress(current_protein, protein_goal, protein_color)
-    fig_fiber = plot_progress(current_fiber, fiber_goal, fiber_color)
+fig, axs = plt.subplots(1, 3, figsize=(12, 4), dpi=100)
+fig.patch.set_facecolor('black')  # Set the figure background color
 
-    # Display all charts side by side in Streamlit
-    # col1, col2, col3 = st.columns(3)
-    with st.container():
-        col1, col2, col3 = st.columns([1, 1, 1])  # Equally sized columns
+# Plot each progress chart in a different subplot
+plot_progress(current_calories, calorie_goal, calorie_color, axs[0])
+axs[0].set_title("Calories", color='white')
 
-    with col1:
-        st.write("Calories")
-        st.pyplot(fig_calories)
+plot_progress(current_protein, protein_goal, protein_color, axs[1])
+axs[1].set_title("Protein", color='white')
 
-    with col2:
-        st.write("Protein")
-        st.pyplot(fig_protein)
+plot_progress(current_fiber, fiber_goal, fiber_color, axs[2])
+axs[2].set_title("Fiber", color='white')
 
-    with col3:
-        st.write("Fiber")
-        st.pyplot(fig_fiber)
+# Adjust layout and display the figure
+plt.subplots_adjust(wspace=0.3)  # Adjust the space between the subplots
+
+# Display the figure in Streamlit
+st.pyplot(fig)
+
+#--------------presets-------------------------------------
+#-------unused dropdown ver.--------------
+# prdropdown=st.selectbox(label="Change preset",options=prdata["Name"])
+# preditor=st.data_editor(prdata[prdata["Name"] == prdropdown].iloc[:, 1:])
+# if st.button(label="Change"):
+#     editedpr=json.loads(preditor.to_json(orient="records"))[0]
+#     pr.replace_one({"Name":prdropdown},editedpr)
+#     editedpr["Name"] = "Preset"
+#     pr.replace_one({"Name":"Preset"},editedpr)
+#     st.write("Done!")
+
+#------button ver.---------
+# Create three columns
+col0, col1, col2, col3 = st.columns(4)
+
+# Add a button in each column
+with col0: st.write("Change preset:")
+
+with col1:
+    if st.button('Active'):
+        pr.update_one({"Name":"Preset"},{"$set": {"Calories": 3000}})
+        st.write('Done!')
+
+with col2:
+    if st.button('Very Active'):
+        pr.update_one({"Name":"Preset"},{"$set": {"Calories": 3500}})
+        st.write('Done!')
+
+with col3:
+    if st.button('Not Active'):
+        pr.update_one({"Name":"Preset"},{"$set": {"Calories": 2500}})
+        st.write('Done!')
+
 
 #---------------plotting by ChatGPT-------------------------
 st.write(" ")
@@ -266,75 +293,142 @@ if st.session_state.get("AskB",False):
     if st.session_state["newfood"]==None or len(st.session_state["newfood"].strip())==0:
         st.write("Empty input")
     else:
-        client = OpenAI(
+        if not st.session_state.get("gptresponse",False):
+            client = OpenAI(
 
-            api_key=key,
-        )
+                api_key=key,
+            )
 
-        chat_completion = client.chat.completions.create(
-            messages=[
-                {
-                    "role": "user",
-                    "content": f'provide nutrition information for {st.session_state["newfood"]} in a json dictionary without formating, with "Food"(value={st.session_state["newfood"]}) and "Calories", "Fat", "Carbs", "Protein" and "Fiber" (meaning soluble fiber) in float with 1 decimal place and no other words'
-                }
-            ],
-            model="gpt-4o",
-        )
-        gptresponse=chat_completion.choices[0].message.content
-        st.write(gptresponse)
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f'provide nutrition information for {st.session_state["newfood"]} in a json dictionary without formating, with "Food"(value={st.session_state["newfood"]}) and "Calories", "Fat", "Carbs", "Protein" and "Fiber" (meaning soluble fiber) in float with 1 decimal place and no other words'
+                    }
+                ],
+                model="gpt-4o",
+            )
+            st.session_state["gptresponse"]=chat_completion.choices[0].message.content
+
+        gptdf = st.data_editor(pd.DataFrame([json.loads(st.session_state["gptresponse"])]))
+        gptfood = json.loads(gptdf.to_json(orient="records"))[0]
         st.write("Does this look okay?")
         if st.button(label="Confirm"):
-            ni.insert_one(json.loads(gptresponse))
+            ni.insert_one(gptfood)
             st.write("Done!")
-
-
-
-
 
 #----------------------------ideas for future------------------------------------
 #---------------add a new food with image--------------------
+# Text input for the prompt
+st.session_state["foodname"] = st.text_input(label="Food name:")
+
 # File uploader for any type of file
-# uploaded_file = st.file_uploader("Or, upload an image of the nutrition facts")
-#
-# # Text input for the prompt
-# st.session_state["foodname"] = st.text_input(label="Food name:")
-# if st.button(label="Let's go!"):
-#     st.session_state["LG"]=True
-# if st.session_state.get("LG",False):
-#     # Check if both file and prompt are provided
-#     if uploaded_file is not None:
-#         if st.session_state["foodname"] == None or len(st.session_state["foodname"].strip()) == 0:
-#             st.write("Empty input")
-#         else:
-#             client = OpenAI(
-#
-#                 api_key=key,
-#             )
-#             # Read the file's contents (depending on its type, e.g., text)
-#             file_contents = uploaded_file.read()
-#             file_base64 = base64.b64encode(file_contents).decode('utf-8')
-#
-#             # Create a message combining the prompt and file content
-#             full_prompt = f'''
-#             Provide nutrition information based on the uploaded image (base64 encoded), in a JSON dictionary without formatting, with:
-#             - "Food" (value = {st.session_state["foodname"]})
-#             - "Calories", "Fat", "Carbs", "Protein", and "Fiber" (meaning soluble fiber) in float with 1 decimal place and no other words.
-#
-#             Image (base64):
-#             {file_base64}
-#             '''
-#
-#             # Send the prompt with file content to ChatGPT using the OpenAI API
-#             response = client.chat.completions.create(
-#                 model="gpt-4o",
-#                 messages=[
-#                     {"role": "user", "content": full_prompt},
-#                 ]
-#             )
-#             gptresponse = response.choices[0].message.content
-#             st.write(gptresponse)
-#             st.write("Does this look okay?")
-#             if st.button(label="Confirm"):
-#                 ni.insert_one(json.loads(gptresponse))
-#                 st.write("Done!")
+uploaded_file = st.file_uploader("Or, upload an image of the nutrition facts")
+
+if st.button(label="Let's go!"):
+    st.session_state["LG"]=True
+if st.session_state.get("LG",False):
+    # Check if both file and prompt are provided
+    if uploaded_file is not None:
+            # Upload image to Imgur
+            url = "https://api.imgur.com/3/image"
+            payload = {'type': 'image',
+                       'title': 'Simple upload',
+                       'description': 'This is a simple image upload in Imgur'}
+            files = [
+                ('image', ('GHJQTpX.jpeg', uploaded_file, 'image/jpeg'))
+            ]
+            headers = {
+                'Authorization': f'Client-ID {imgur_client_id}'
+            }
+
+            if st.session_state.get("response_link",False):
+                client = OpenAI(api_key=key)
+                # Create the message combining the prompt and file content
+                full_prompt = f'''
+                               Provide nutrition information based on the uploaded image, in a JSON dictionary without formatting, with:
+                               - "Food" (value = {st.session_state["foodname"]})
+                               - "Calories", "Fat", "Carbs", "Protein", and "Fiber" (meaning soluble fiber) in float with 1 decimal place and no other words.
+                               '''
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": full_prompt},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": st.session_state["response_link"],
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                    max_tokens=300,
+                )
+                # response = client.chat.completions.create(
+                #     model="gpt-4",
+                #     messages=[{"role": "user", "content": full_prompt}]
+                # )
+                gptresponse = response.choices[0].message.content
+                st.write(gptresponse)
+                gptdf = st.data_editor(pd.DataFrame([json.loads(gptresponse)]))
+                st.write("Does this look okay?")
+                gptfood = json.loads(gptdf.to_json(orient="records"))[0]
+                if st.button(label="Confirm"):
+                    ni.insert_one(gptfood)
+                    st.write("Done!")
+
+            else:
+                try:
+                    response = requests.request("POST", url, headers=headers, data=payload, files=files)
+                    response_body=json.loads(response.text)
+                    if response_body["status"] ==200:
+                        st.write(response_body["data"]["link"])
+                        st.session_state["response_link"]=response_body["data"]["link"]
+
+                        client = OpenAI(api_key=key)
+                        # Create the message combining the prompt and file content
+                        full_prompt = f'''
+                                       Provide nutrition information based on the uploaded image, in a JSON dictionary without formatting, with:
+                                       - "Food" (value = {st.session_state["foodname"]})
+                                       - "Calories", "Fat", "Carbs", "Protein", and "Fiber" (meaning soluble fiber) in float with 1 decimal place and no other words.
+                                       '''
+                        response = client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=[
+                                {
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "text", "text": full_prompt},
+                                        {
+                                            "type": "image_url",
+                                            "image_url": {
+                                                "url": st.session_state["response_link"],
+                                            },
+                                        },
+                                    ],
+                                }
+                            ],
+                            max_tokens=300,
+                        )
+                        # response = client.chat.completions.create(
+                        #     model="gpt-4",
+                        #     messages=[{"role": "user", "content": full_prompt}]
+                        # )
+                        gptresponse = response.choices[0].message.content
+                        st.write(gptresponse)
+                        gptdf = st.data_editor(pd.DataFrame([json.loads(gptresponse)]))
+                        st.write("Does this look okay?")
+                        gptfood = json.loads(gptdf.to_json(orient="records"))[0]
+                        if st.button(label="Confirm"):
+                            ni.insert_one(gptfood)
+                            st.write("Done!")
+
+                    else:
+                        st.write(response_body)
+                except:
+                    st.write("error from imgur")
 #--------------------------------------------------------------------------------------------------------------
