@@ -14,9 +14,6 @@ from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 import pytz
 
-from temp.keys import imgur_client_id
-
-
 @st.cache_resource
 def init_client():
     return MongoClient(uri, server_api=ServerApi('1'))
