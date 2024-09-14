@@ -83,16 +83,8 @@ if st.session_state.get("authresult",(None,False,None))[1]:
     nid = ni.find({"User":st.session_state["authresult"][2]})
     data=pd.DataFrame(list(nid))
     dropdown=st.selectbox(label="Food",options=data["Food"],index=list(data["Food"]).index(" "))
-    foodeditor=st.data_editor(data[data["Food"]==dropdown].iloc[:, 1:-1].set_index('Food'))
-    if st.button(label="Update"):
-        editedfood=json.loads(foodeditor.to_json(orient="records"))[0]
-        editedfood["Food"] = dropdown
-        editedfood["User"] = st.session_state["authresult"][2]
-        ni.replace_one({"$and":[{"User":st.session_state["authresult"][2]},{"Food":dropdown}]},editedfood)
-        st.write("Done!")
     #select quantity
     quantity=st.number_input(label="Quantity",min_value=-5000.1,placeholder=" ",value=None)
-
     #choose from dropdown
     if st.button(label="Add"):
         if dropdown == " " or quantity==None:
@@ -149,6 +141,14 @@ if st.session_state.get("authresult",(None,False,None))[1]:
                 todaydata["User"]=st.session_state["authresult"][2]
                 nt.insert_one(todaydata)
                 st.write("Done!")
+
+    foodeditor=st.data_editor(data[data["Food"]==dropdown].iloc[:, 1:-1].set_index('Food'))
+    if st.button(label="Update"):
+        editedfood=json.loads(foodeditor.to_json(orient="records"))[0]
+        editedfood["Food"] = dropdown
+        editedfood["User"] = st.session_state["authresult"][2]
+        ni.replace_one({"$and":[{"User":st.session_state["authresult"][2]},{"Food":dropdown}]},editedfood)
+        st.write("Done!")
 
     #-----------------daily goals by ChatGPT--------------------------
     def plot_progress(current_value, max_value, color, ax):
