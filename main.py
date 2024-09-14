@@ -50,7 +50,7 @@ auth = Authenticate(
 )
 
 st.session_state["authresult"] = auth.login('main')
-st.write(st.session_state["authresult"])
+# st.write(st.session_state["authresult"])
 
 if st.session_state.get("authresult",(None,False,None))[1]:
     past_data = list(nt.find({"User":st.session_state["authresult"][2]}).sort("Date", -1).limit(30))
@@ -152,16 +152,50 @@ if st.session_state.get("authresult",(None,False,None))[1]:
 
     #-----------------daily goals by ChatGPT--------------------------
     def plot_progress(current_value, max_value, color, ax):
+        """
+        Plots a progress ring indicating the completion percentage.
+        If current_value exceeds max_value, the overflow is indicated in a different color.
+
+        Parameters:
+        - current_value (float): The current progress value.
+        - max_value (float): The maximum value representing 100% completion.
+        - color (str): The color for the completed portion of the progress ring.
+        - ax (matplotlib.axes.Axes): The matplotlib Axes object to plot on.
+        """
         # Calculate percentage completion
         percent = current_value / max_value
+        overflow = percent > 1  # Determine if there's an overflow
 
-        # Create the outer ring (full circle)
-        ax.pie([percent, 1 - percent], startangle=90, colors=[color, 'darkgray'],
-               radius=1.2, wedgeprops=dict(width=0.3))
+        # Define display percent for the pie chart (max 1)
+        display_percent = min(percent, 1)
+
+        # Define colors based on overflow
+        if overflow:
+            # Completed portion in 'color', overflow portion in 'red'
+            colors = [color, 'red', 'darkgray']
+            sizes = [1, percent - 1, 0]  # Overflow portion
+        else:
+            colors = [color, 'darkgray']
+            sizes = [display_percent, 1 - display_percent]
+
+        # Create the outer ring (progress ring)
+        if overflow:
+            # Show completed portion and overflow
+            ax.pie(sizes[:2], startangle=90, colors=colors[:2],
+                   radius=1.2, wedgeprops=dict(width=0.3, edgecolor='white'))
+        else:
+            # Show only completed portion
+            ax.pie(sizes, startangle=90, colors=colors,
+                   radius=1.2, wedgeprops=dict(width=0.3, edgecolor='white'))
 
         # Add text to the center
-        ax.text(0, 0, f'{int(percent * 100)}%', ha='center', va='center', fontsize=20, fontweight='bold', color='white')
-        ax.text(0, -0.3, f'({int(current_value)} / {max_value})', ha='center', va='center', fontsize=15, fontweight='bold', color='white')
+        percentage_text = f'{int(min(percent, 1) * 100)}%'
+        if overflow:
+            percentage_text += '↑'  # Indicate overflow
+        ax.text(0, 0, percentage_text, ha='center', va='center',
+                fontsize=20, fontweight='bold', color='white')
+        ax.text(0, -0.3, f'({int(current_value)} / {max_value})',
+                ha='center', va='center', fontsize=15, fontweight='bold', color='white')
 
         # Set background color and remove axis
         ax.set_facecolor('black')  # Set the axes background color
