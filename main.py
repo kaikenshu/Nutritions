@@ -1,6 +1,6 @@
 import base64
 import json
-
+import re  # Add this import to help remove units from the response
 import requests
 import streamlit as st
 import pandas as pd
@@ -203,6 +203,7 @@ if st.session_state.get("authresult",(None,False,None))[1]:
         ax.axis('off')  # Hide the background axis
 
     # Example usage in Streamlit:
+    st.write(" ")
     st.write("Daily Nutritional Progress")
     if not df[df['Date'] == today_date].empty:
         Calories_value = prdata.loc[prdata['Name'] == 'Preset', 'Calories'].values[0]
@@ -280,64 +281,71 @@ if st.session_state.get("authresult",(None,False,None))[1]:
 
     #---------------plotting by ChatGPT-------------------------
     st.write(" ")
-    st.write("Trends")
+    st.write("7-day rolling averages")
+
     # If there's data
     if past_data:
         dfp = pd.DataFrame(past_data)
         dfp.set_index('Date', inplace=True)  # Assuming Date field exists and is formatted correctly
         dfp.index = pd.to_datetime(dfp.index)  # Ensure the Date index is in datetime format
+
+        if not dfp.empty:  # Ensure DataFrame has data
+            # Plotting
+            fig, ax1 = plt.subplots(figsize=(10, 6))
+
+            # Set dark background color for the figure and axes
+            fig.patch.set_facecolor('black')  # Set figure background color
+            ax1.set_facecolor('black')  # Set axes background color
+
+            # Plot Fat, Carbs, Protein (7-day averages) as line graphs
+            ax1.plot(dfp.index, dfp['Fat7'], label='Fat (g)', color='#ffcc00', linestyle='-', marker='o', markersize=8,
+                     alpha=0.8)
+            ax1.plot(dfp.index, dfp['Car7'], label='Carbs (g)', color='#2a9d8f', linestyle='-', marker='o',
+                     markersize=8, alpha=0.8)
+            ax1.plot(dfp.index, dfp['Pro7'], label='Protein (g)', color='#e63946', linestyle='-', marker='o',
+                     markersize=8, alpha=0.8)
+
+            # Set labels for the first y-axis
+            ax1.set_ylabel('Grams (g)', fontsize=12)
+            ax1.set_xlabel('Date', fontsize=12)
+            ax1.set_ylim([0, 400])
+
+            # Customize ticks and grid
+            ax1.tick_params(axis='x', rotation=45, colors='white')
+            ax1.tick_params(axis='y', colors='white')
+            ax1.grid(True, linestyle='--', alpha=0.3)
+
+            # Create a second y-axis for Calories (bars)
+            ax2 = ax1.twinx()
+            ax2.bar(dfp.index, dfp['Cal7'], label='Calories (kcal)', color='dimgrey', alpha=0.6, width=0.05)
+            ax2.set_ylim([0, 4500])
+
+            # Set y-axis label
+            ax2.set_ylabel('Calories (kcal)', fontsize=12)
+
+            # Set color for second y-axis ticks
+            ax2.tick_params(axis='y', colors='white')
+
+            # Plot Fiber as scatter plot (dots), scaling the size of the dots based on fiber intake
+            fiber_sizes = dfp['Fib7'] / 45 * 100  # Scaling fiber sizes (0-45g mapped to 0-100 size)
+            ax1.scatter(dfp.index, dfp['Fib7'], label='Fiber (g)', color='#9b5de5', s=fiber_sizes, alpha=0.7)
+
+            # Add legends with transparent backgrounds
+            ax1.legend(loc='upper left', frameon=False, labelcolor='white')
+            ax2.legend(loc='upper right', frameon=False, labelcolor='white')
+
+            # Tighten layout
+            plt.tight_layout()
+
+            # Ensure background color is saved correctly
+            st.pyplot(fig)
+        else:
+            st.write("No data available for the last 7 days.")
     else:
-        st.error("No data available for the last 30 days.")
-        dfp = pd.DataFrame(columns=['Date', 'Cal7', 'Fat7', 'Car7', 'Pro7', 'Fib7'])  # Empty DataFrame for safety
-
-    # Plotting
-    fig, ax1 = plt.subplots(figsize=(10, 6))
-
-    # Set dark background color for the figure and axes
-    fig.patch.set_facecolor('black')  # Set figure background color
-    ax1.set_facecolor('black')  # Set axes background color
-
-    # Plot Fat, Carbs, Protein (7-day averages) as line graphs
-    ax1.plot(dfp.index, dfp['Fat7'], label='Fat (g)', color='#ffcc00', linestyle='-', marker='o', markersize=8, alpha=0.8)
-    ax1.plot(dfp.index, dfp['Car7'], label='Carbs (g)', color='#2a9d8f', linestyle='-', marker='o', markersize=8, alpha=0.8)
-    ax1.plot(dfp.index, dfp['Pro7'], label='Protein (g)', color='#e63946', linestyle='-', marker='o', markersize=8, alpha=0.8)
-
-    # Set labels for the first y-axis
-    ax1.set_ylabel('Grams (g)', fontsize=12)
-    ax1.set_xlabel('Date', fontsize=12)
-    ax1.set_ylim([0, 400])
-
-    # Customize ticks and grid
-    ax1.tick_params(axis='x', rotation=45, colors='white')
-    ax1.tick_params(axis='y', colors='white')
-    ax1.grid(True, linestyle='--', alpha=0.3)
-
-    # Create a second y-axis for Calories (bars)
-    ax2 = ax1.twinx()
-    ax2.bar(dfp.index, dfp['Cal7'], label='Calories (kcal)', color='dimgrey', alpha=0.6, width=0.05)
-    ax2.set_ylim([0, 4500])
-
-    # Set y-axis label
-    ax2.set_ylabel('Calories (kcal)', fontsize=12)
-
-    # Set color for second y-axis ticks
-    ax2.tick_params(axis='y', colors='white')
-
-    # Plot Fiber as scatter plot (dots), scaling the size of the dots based on fiber intake
-    fiber_sizes = dfp['Fib7'] / 45 * 100  # Scaling fiber sizes (0-45g mapped to 0-100 size)
-    ax1.scatter(dfp.index, dfp['Fib7'], label='Fiber (g)', color='#9b5de5', s=fiber_sizes, alpha=0.7)
-
-    # Add legends with transparent backgrounds
-    ax1.legend(loc='upper left', frameon=False, labelcolor='white')
-    ax2.legend(loc='upper right', frameon=False, labelcolor='white')
-
-    # Tighten layout
-    plt.tight_layout()
-
-    # Ensure background color is saved correctly
-    st.pyplot(fig)
+        st.write("No data available for the last 30 days.")
 
     #---------------------------add a new food item-------------------------------
+    st.title("Add food to database")
     st.session_state["newfood"] = st.text_input(label="Enter new food and quantity")
     if st.button(label="Ask"):
         st.session_state["AskB"]=True
@@ -370,9 +378,9 @@ if st.session_state.get("authresult",(None,False,None))[1]:
                 ni.insert_one(gptfood)
                 st.write("Done!")
 
-    #----------------------------ideas for future------------------------------------
     #---------------add a new food with image--------------------
     # Text input for the prompt
+    st.title("Scan nutrition facts")
     st.session_state["foodname"] = st.text_input(label="Or, enter a food name")
 
     # File uploader for any type of file
@@ -486,4 +494,186 @@ if st.session_state.get("authresult",(None,False,None))[1]:
                         st.write(response_body)
                 except:
                     st.write("error from imgur")
-#--------------------------------------------------------------------------------------------------------------
+
+    # -----------------------Recipe input by ChatGPT-----------------------------
+    # Track whether the "Cook" button was pressed
+    if "cook_pressed" not in st.session_state:
+        st.session_state["cook_pressed"] = False
+
+    # Input fields for food name and ingredients
+    st.title("Add a recipe")
+    food_name = st.text_input(label="Enter food name")
+    ingredients = st.text_area(label="and ingredients (separated by commas)")
+
+    # Handle the "Cook" button press
+    if st.button(label="Cook"):
+        if food_name and ingredients:
+            st.session_state["cook_pressed"] = True
+            ingredients_list = ingredients.split(",")  # Split the ingredients into a list
+
+            # Prompt GPT-4o for both aggregated and individual ingredient nutrition information
+            combined_prompt = f'''
+            Provide aggregated nutrition information for the dish "{food_name}" based on the following ingredients (with exact amounts):
+            {', '.join(ingredients_list)}. Return the total values for:
+            - Calories
+            - Fat
+            - Carbs
+            - Protein
+            - Fiber
+
+            Ensure that the values are based on the exact quantities given for each ingredient (e.g., 100g of an ingredient should return values for 100g, not per 100g).
+
+            Then, for each ingredient, provide individual values in a JSON dictionary format, including:
+            - "Food" (the name of the ingredient from the list)
+            - "Calories"
+            - "Fat"
+            - "Carbs"
+            - "Protein"
+            - "Fiber"
+
+            Return the entire response as a list of JSON dictionaries. The first dictionary should represent the aggregated nutrition information for the whole dish, and the remaining dictionaries should represent the individual ingredients. No additional formatting or text.
+            '''
+
+            client = OpenAI(api_key=key)
+
+            # Request to GPT-4o for aggregated recipe and ingredient information
+            chat_completion = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role": "user", "content": combined_prompt}]
+            )
+
+            # Parse the GPT response
+            gpt_response = chat_completion.choices[0].message.content
+            st.write(gpt_response)
+
+            try:
+                # Parse the response data into a list of dictionaries
+                response_data = json.loads(gpt_response)
+
+
+                # Function to clean up units (like 'g') from the values
+                def clean_value(value):
+                    # If the value is already a number, return it as is
+                    if isinstance(value, (int, float)):
+                        return value
+                    # Use regex to remove any units (like 'g') and convert the value to a float
+                    return float(re.sub(r'[^\d.]+', '', value))
+
+
+                # Clean the first dictionary (aggregated data for the entire dish)
+                aggregated_data = pd.DataFrame([{
+                    "Food": food_name,  # Place "Food" as the first item
+                    "Calories": clean_value(response_data[0]["Calories"]),
+                    "Fat": clean_value(response_data[0]["Fat"]),
+                    "Carbs": clean_value(response_data[0]["Carbs"]),
+                    "Protein": clean_value(response_data[0]["Protein"]),
+                    "Fiber": clean_value(response_data[0]["Fiber"])
+                }])
+
+                # Store data in session state
+                st.session_state["aggregated_data"] = aggregated_data
+                st.session_state["response_data"] = response_data  # Keep raw response for Confirm button use
+
+                # Display the aggregated nutrition info (editable table)
+                st.write("Total Nutrition Information for the Dish:")
+                st.data_editor(aggregated_data)
+
+                # Clean the remaining dictionaries (ingredients data)
+                ingredients_data = []
+                for ingredient in response_data[1:]:
+                    ingredients_data.append({
+                        "Food": ingredient["Food"],  # This will now exist for each ingredient
+                        "Calories": clean_value(ingredient["Calories"]),
+                        "Fat": clean_value(ingredient["Fat"]),
+                        "Carbs": clean_value(ingredient["Carbs"]),
+                        "Protein": clean_value(ingredient["Protein"]),
+                        "Fiber": clean_value(ingredient["Fiber"])
+                    })
+
+                # Convert the ingredients data to a DataFrame
+                ingredients_df = pd.DataFrame(ingredients_data)
+
+                # Store the ingredients data in session state
+                st.session_state["ingredients_data"] = ingredients_df
+
+                # Display individual ingredient nutrition info
+                st.write("Ingredients:")
+                st.table(ingredients_df)
+
+                st.write("Does this look okay?")
+
+            except json.JSONDecodeError:
+                st.error("Failed to parse GPT response. Please try again.")
+                st.write("Raw GPT Response:", gpt_response)  # Display raw response for debugging
+            except IndexError:
+                st.error("The GPT response does not contain the expected data structure.")
+        else:
+            st.write("Please enter both a food name and ingredients.")
+
+    # Handle the "Confirm" button press
+    if st.session_state.get("cook_pressed", False):
+        if st.button(label="Confirm"):
+            try:
+                # Retrieve aggregated data from session state
+                aggregated_data = st.session_state["aggregated_data"]
+                aggregated_data_dict = aggregated_data.to_dict(orient="records")[0]
+
+                # Ensure session state has the required key for user authentication
+                if "authresult" in st.session_state and st.session_state["authresult"][2]:
+                    aggregated_data_dict["User"] = st.session_state["authresult"][2]
+
+                    # Insert into MongoDB
+                    ni.insert_one(aggregated_data_dict)
+
+                    # Reset the state
+                    st.session_state["cook_pressed"] = False
+                    st.write("Done!")
+
+                else:
+                    st.error("User not authenticated or session state missing.")
+
+            except Exception as e:
+                # Catch any exceptions and print them to help debug the issue
+                st.error(f"Failed to insert data into MongoDB: {e}")
+                st.write("Debug info:", aggregated_data_dict)
+
+    #-------------------direct input by ChatGPT-------------------
+    # Input field for food name, calories, fat, carbs, protein, and fiber
+    st.title("Direct input")
+    input_data = st.text_input(
+        label="Enter food name, calories, fat (g), carbs (g), protein (g), fiber (g) separated by commas")
+
+    if st.button(label="Do it!"):
+        # Ensure that the input is not empty
+        if input_data:
+            try:
+                # Split the input by commas
+                food_name, calories, fat, carbs, protein, fiber = input_data.split(',')
+
+                # Strip spaces from numerical fields and convert them to floats
+                calories = float(calories.strip())
+                fat = float(fat.strip())
+                carbs = float(carbs.strip())
+                protein = float(protein.strip())
+                fiber = float(fiber.strip())
+
+                # Create a JSON object with the input values
+                food_data = {
+                    "Food": food_name.strip(),  # Don't strip spaces from the food name
+                    "Calories": calories,
+                    "Fat": fat,
+                    "Carbs": carbs,
+                    "Protein": protein,
+                    "Fiber": fiber,
+                    "User": st.session_state["authresult"][2]  # Add the current user
+                }
+
+                # Insert the data into the MongoDB collection
+                ni.insert_one(food_data)
+                st.write("Done!")
+            except ValueError:
+                st.error("Please ensure the input is in the correct format with valid numerical values.")
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+        else:
+            st.error("Please enter the required data.")
