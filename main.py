@@ -53,7 +53,7 @@ st.session_state["authresult"] = auth.login('main')
 # st.write(st.session_state["authresult"])
 
 if st.session_state.get("authresult",(None,False,None))[1]:
-    past_data = list(nt.find({"User":st.session_state["authresult"][2]}).sort("Date", -1).limit(30))
+    past_data = list(nt.find({"User": st.session_state["authresult"][2]}).sort("Date", -1).limit(30))
     prd = pr.find()
     prdata=pd.DataFrame(list(prd))
 
@@ -120,13 +120,22 @@ if st.session_state.get("authresult",(None,False,None))[1]:
                 #-----------------by ChatGPT------------------------
                 # Convert to DataFrame for easier rolling calculation
                 dfc = pd.DataFrame(past_data)
+                # Ensure the 'Date' field is converted to datetime format, if necessary
+                dfc['Date'] = pd.to_datetime(dfc['Date'])
+                # Sort by Date in ascending order so rolling calculations work correctly
+                dfc = dfc.sort_values(by='Date')
                 dfc.set_index('Date', inplace=True)
-                # Calculate 7-day rolling averages excluding the current day
+
+                # Calculate 7-day rolling averages excluding the current day (shift by 1 day)
                 rolling_avg_7 = \
-                    dfc[['Calories', 'Fat', 'Carbs', 'Protein', 'Fiber']].rolling(window=7, min_periods=1).mean().iloc[-1]
-                # Calculate 30-day rolling averages excluding the current day
+                dfc[['Calories', 'Fat', 'Carbs', 'Protein', 'Fiber']].rolling(window=7, min_periods=1).mean().shift(
+                    1).iloc[-1]
+
+                # Calculate 30-day rolling averages excluding the current day (shift by 1 day)
                 rolling_avg_30 = \
-                    dfc[['Calories', 'Fat', 'Carbs', 'Protein', 'Fiber']].rolling(window=30, min_periods=1).mean().iloc[-1]
+                dfc[['Calories', 'Fat', 'Carbs', 'Protein', 'Fiber']].rolling(window=30, min_periods=1).mean().shift(
+                    1).iloc[-1]
+
                 # Add rolling averages to today's data with new column names
                 todaydata["Cal7"] = rolling_avg_7["Calories"]
                 todaydata["Fat7"] = rolling_avg_7["Fat"]
@@ -138,7 +147,9 @@ if st.session_state.get("authresult",(None,False,None))[1]:
                 todaydata["Car30"] = rolling_avg_30["Carbs"]
                 todaydata["Pro30"] = rolling_avg_30["Protein"]
                 todaydata["Fib30"] = rolling_avg_30["Fiber"]
-                todaydata["User"]=st.session_state["authresult"][2]
+                todaydata["User"] = st.session_state["authresult"][2]
+
+                # Insert into MongoDB or whatever your storage solution is
                 nt.insert_one(todaydata)
                 st.write("Done!")
 
