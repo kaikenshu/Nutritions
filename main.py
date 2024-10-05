@@ -14,7 +14,8 @@ from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 import pytz
 import streamlit_authenticator as stauth
-from streamlit_authenticator import Authenticate
+from streamlit_authenticator import Authenticate, LoginError
+
 
 @st.cache_resource
 def init_client():
@@ -23,7 +24,7 @@ def init_client():
 #toggle on for testing
 # from temp.keys import key, uri, imgur_client_id
 
-#toggle on for production
+# toggle on for production
 key = st.secrets["key"]
 uri = st.secrets["uri"]
 imgur_client_id = st.secrets["imgur_client_id"]
@@ -46,46 +47,52 @@ auth = Authenticate(
     userdata['cookie']['name'],
     userdata['cookie']['key'],
     userdata['cookie']['expiry_days'],
-    userdata['preauthorized']
+    # userdata['preauthorized']
 )
 
-st.session_state["authresult"] = auth.login('main')
-# st.write(st.session_state["authresult"])
-
-if st.session_state.get("authresult",(None,False,None))[1]:
-    past_data = list(nt.find({"User": st.session_state["authresult"][2]}).sort("Date", -1).limit(30))
+try:
+    auth.login()
+except LoginError as e:
+    st.error(e)
+# st.write(st.session_state["authentication_status"])
+st.write(st.session_state["username"])
+if st.session_state.get("authentication_status"):
+    past_data = list(nt.find({"User": st.session_state["username"]}).sort("Date", -1).limit(30))
     prd = pr.find()
     prdata=pd.DataFrame(list(prd))
-
     #timezone
     today_date = datetime.datetime.now(pytz.timezone("US/Pacific")).strftime("%Y-%m-%d")
     st.write(datetime.datetime.now(pytz.timezone("US/Pacific")).strftime("%Y-%m-%d"))
 
     #rolling averages
-    ntt = nt.find({"$and":[{"User":st.session_state["authresult"][2]},{"Date":{"$gt":str(datetime.datetime.strptime(today_date,"%Y-%m-%d")-datetime.timedelta(days=31))}}]})
-    dft = pd.DataFrame(list(ntt))
+    ntt = list(nt.find({"$and":[{"User":st.session_state["username"]},{"Date":{"$gt":str(datetime.datetime.strptime(today_date,"%Y-%m-%d")-datetime.timedelta(days=31))}},{"Date":{"$lt":str(datetime.datetime.strptime(today_date,"%Y-%m-%d"))}}]}))
+    ntt.sort(key=lambda x:x["Date"])
+    ntt = ntt[::-1]
 
-    def ra7(series):
-        rolling_avg_7 = series.rolling(window=7, min_periods=1).mean().shift(1)  # shift to exclude current day
-        return rolling_avg_7
+    def roll_avg7(jsonlist, key):
+        items = [x[key] for x in jsonlist[:7]]
+        return sum(items)/7
 
     #title
     st.write("Time to get jacked")
 
     #tracker
-    ntd = nt.find({"$and":[{"User":st.session_state["authresult"][2]},{"Date":{"$gt":str(datetime.datetime.strptime(today_date,"%Y-%m-%d")-datetime.timedelta(days=5))}}]})
+    ntd = nt.find({"$and":[{"User":st.session_state["username"]},{"Date":{"$gt":str(datetime.datetime.strptime(today_date,"%Y-%m-%d")-datetime.timedelta(days=5))}}]})
     df = pd.DataFrame(list(ntd))
     df3 = df
     df3['Consumption'] = df3['Consumption'].astype(str)
     st.dataframe(df3.iloc[:, 1:].set_index('Date'))
 
     #select food
-    nid = ni.find({"User":st.session_state["authresult"][2]})
+    nid = ni.find({"User":st.session_state["username"]})
     data=pd.DataFrame(list(nid))
+    #choose from dropdown
     dropdown=st.selectbox(label="Food",options=data["Food"],index=list(data["Food"]).index(" "))
     #select quantity
     quantity=st.number_input(label="Quantity",min_value=-5000.1,placeholder=" ",value=None)
-    #choose from dropdown
+    #date
+    date=st.date_input(label="Date").strftime("%Y-%m-%d")
+
     if st.button(label="Add"):
         if dropdown == " " or quantity==None:
             st.write("Missing info")
@@ -93,9 +100,9 @@ if st.session_state.get("authresult",(None,False,None))[1]:
             dftemp = data[data["Food"] == dropdown]
             dftemp[["Calories","Fat","Carbs","Protein","Fiber"]] = dftemp[["Calories","Fat","Carbs","Protein","Fiber"]].apply(lambda x: float(x) * quantity)
 
-            if today_date in df['Date'].values:
-                todaydata=nt.find_one({"$and":[{"User":st.session_state["authresult"][2]},{"Date":today_date}]})
-                fooditem=ni.find_one({"$and":[{"User":st.session_state["authresult"][2]},{"Food":dropdown}]})
+            if date in df['Date'].values:
+                todaydata=nt.find_one({"$and":[{"User":st.session_state["username"]},{"Date":date}]})
+                fooditem=ni.find_one({"$and":[{"User":st.session_state["username"]},{"Food":dropdown}]})
                 todaydata["Calories"]+=quantity*fooditem["Calories"]
                 todaydata["Fat"]+=quantity*fooditem["Fat"]
                 todaydata["Carbs"] +=quantity*fooditem["Carbs"]
@@ -103,12 +110,12 @@ if st.session_state.get("authresult",(None,False,None))[1]:
                 todaydata["Fiber"] +=quantity*fooditem["Fiber"]
                 fooditem["Quantity"]=quantity
                 todaydata["Consumption"].append([fooditem["Food"],fooditem["Quantity"]])
-                nt.replace_one({"_id":ObjectId(nt.find_one({"Date":today_date})["_id"])},todaydata)
+                nt.replace_one({"_id":ObjectId(nt.find_one({"Date":date})["_id"])},todaydata)
                 st.write("Done!")
 
             else:
-                todaydata={"Date":today_date}
-                fooditem=ni.find_one({"$and":[{"User":st.session_state["authresult"][2]},{"Food":dropdown}]})
+                todaydata={"Date":date}
+                fooditem=ni.find_one({"$and":[{"User":st.session_state["username"]},{"Food":dropdown}]})
                 todaydata["Calories"]=quantity*fooditem["Calories"]
                 todaydata["Fat"]=quantity*fooditem["Fat"]
                 todaydata["Carbs"]=quantity*fooditem["Carbs"]
@@ -117,37 +124,13 @@ if st.session_state.get("authresult",(None,False,None))[1]:
                 fooditem["Quantity"]=quantity
                 todaydata["Consumption"]=[[fooditem["Food"],fooditem["Quantity"]]]
 
-                #-----------------by ChatGPT------------------------
-                # Convert to DataFrame for easier rolling calculation
-                dfc = pd.DataFrame(past_data)
-                # Ensure the 'Date' field is converted to datetime format, if necessary
-                dfc['Date'] = pd.to_datetime(dfc['Date'])
-                # Sort by Date in ascending order so rolling calculations work correctly
-                dfc = dfc.sort_values(by='Date')
-                dfc.set_index('Date', inplace=True)
-
-                # Calculate 7-day rolling averages excluding the current day (shift by 1 day)
-                rolling_avg_7 = \
-                dfc[['Calories', 'Fat', 'Carbs', 'Protein', 'Fiber']].rolling(window=7, min_periods=1).mean().shift(
-                    1).iloc[-1]
-
-                # Calculate 30-day rolling averages excluding the current day (shift by 1 day)
-                rolling_avg_30 = \
-                dfc[['Calories', 'Fat', 'Carbs', 'Protein', 'Fiber']].rolling(window=30, min_periods=1).mean().shift(
-                    1).iloc[-1]
-
-                # Add rolling averages to today's data with new column names
-                todaydata["Cal7"] = rolling_avg_7["Calories"]
-                todaydata["Fat7"] = rolling_avg_7["Fat"]
-                todaydata["Car7"] = rolling_avg_7["Carbs"]
-                todaydata["Pro7"] = rolling_avg_7["Protein"]
-                todaydata["Fib7"] = rolling_avg_7["Fiber"]
-                todaydata["Cal30"] = rolling_avg_30["Calories"]
-                todaydata["Fat30"] = rolling_avg_30["Fat"]
-                todaydata["Car30"] = rolling_avg_30["Carbs"]
-                todaydata["Pro30"] = rolling_avg_30["Protein"]
-                todaydata["Fib30"] = rolling_avg_30["Fiber"]
-                todaydata["User"] = st.session_state["authresult"][2]
+                # # Add rolling averages to today's data with new column names
+                todaydata["Cal7"] = roll_avg7(ntt, "Calories")
+                todaydata["Fat7"] = roll_avg7(ntt, "Fat")
+                todaydata["Car7"] = roll_avg7(ntt, "Carbs")
+                todaydata["Pro7"] = roll_avg7(ntt, "Protein")
+                todaydata["Fib7"] = roll_avg7(ntt, "Fiber")
+                todaydata["User"] = st.session_state["username"]
 
                 # Insert into MongoDB or whatever your storage solution is
                 nt.insert_one(todaydata)
@@ -157,8 +140,8 @@ if st.session_state.get("authresult",(None,False,None))[1]:
     if st.button(label="Update"):
         editedfood=json.loads(foodeditor.to_json(orient="records"))[0]
         editedfood["Food"] = dropdown
-        editedfood["User"] = st.session_state["authresult"][2]
-        ni.replace_one({"$and":[{"User":st.session_state["authresult"][2]},{"Food":dropdown}]},editedfood)
+        editedfood["User"] = st.session_state["username"]
+        ni.replace_one({"$and":[{"User":st.session_state["username"]},{"Food":dropdown}]},editedfood)
         st.write("Done!")
 
     #-----------------daily goals by ChatGPT--------------------------
@@ -220,7 +203,7 @@ if st.session_state.get("authresult",(None,False,None))[1]:
         Calories_value = prdata.loc[prdata['Name'] == 'Preset', 'Calories'].values[0]
         protein_value = prdata.loc[prdata['Name'] == 'Preset', 'Protein'].values[0]
         Fiber_value = prdata.loc[prdata['Name'] == 'Preset', 'Fiber'].values[0]
-        # if df["Date"].astype(str).str.contains(today_date):
+
         # Input values (you can replace these with your actual data)
         current_calories = float(df[df['Date'] == today_date]["Calories"]) # Calorie intake for the day
         calorie_goal = Calories_value  # Calorie goal for the day
@@ -249,25 +232,14 @@ if st.session_state.get("authresult",(None,False,None))[1]:
 
         plot_progress(current_fiber, fiber_goal, fiber_color, axs[2])
         axs[2].set_title("Fiber", color='white')
-
-        # Adjust layout and display the figure
+        #
+        # # Adjust layout and display the figure
         plt.subplots_adjust(wspace=0.3)  # Adjust the space between the subplots
 
         # Display the figure in Streamlit
         st.pyplot(fig)
 
-    #--------------presets-------------------------------------
-    #-------unused dropdown ver.--------------
-    # prdropdown=st.selectbox(label="Change preset",options=prdata["Name"])
-    # preditor=st.data_editor(prdata[prdata["Name"] == prdropdown].iloc[:, 1:])
-    # if st.button(label="Change"):
-    #     editedpr=json.loads(preditor.to_json(orient="records"))[0]
-    #     pr.replace_one({"Name":prdropdown},editedpr)
-    #     editedpr["Name"] = "Preset"
-    #     pr.replace_one({"Name":"Preset"},editedpr)
-    #     st.write("Done!")
-
-    #------button ver.---------
+    #------presets---------
     # Create three columns
     col0, col1, col2, col3 = st.columns(4)
 
@@ -301,6 +273,7 @@ if st.session_state.get("authresult",(None,False,None))[1]:
         dfp.index = pd.to_datetime(dfp.index)  # Ensure the Date index is in datetime format
 
         if not dfp.empty:  # Ensure DataFrame has data
+
             # Plotting
             fig, ax1 = plt.subplots(figsize=(10, 6))
 
@@ -385,7 +358,7 @@ if st.session_state.get("authresult",(None,False,None))[1]:
             gptfood = json.loads(gptdf.to_json(orient="records"))[0]
             st.write("Does this look okay?")
             if st.button(label="Confirm"):
-                gptfood["User"]=st.session_state["authresult"][2]
+                gptfood["User"]=st.session_state["username"]
                 ni.insert_one(gptfood)
                 st.write("Done!")
 
@@ -440,17 +413,14 @@ if st.session_state.get("authresult",(None,False,None))[1]:
                     ],
                     max_tokens=300,
                 )
-                # response = client.chat.completions.create(
-                #     model="gpt-4",
-                #     messages=[{"role": "user", "content": full_prompt}]
-                # )
+
                 gptresponse = response.choices[0].message.content
                 st.write(gptresponse)
                 gptdf = st.data_editor(pd.DataFrame([json.loads(gptresponse)]))
                 st.write("Does this look okay?")
                 gptfood = json.loads(gptdf.to_json(orient="records"))[0]
                 if st.button(label="Confirm"):
-                    gptfood["User"]=st.session_state["authresult"][2]
+                    gptfood["User"]=st.session_state["username"]
                     ni.insert_one(gptfood)
                     st.write("Done!")
 
@@ -487,17 +457,14 @@ if st.session_state.get("authresult",(None,False,None))[1]:
                             ],
                             max_tokens=300,
                         )
-                        # response = client.chat.completions.create(
-                        #     model="gpt-4",
-                        #     messages=[{"role": "user", "content": full_prompt}]
-                        # )
+
                         gptresponse = response.choices[0].message.content
                         st.write(gptresponse)
                         gptdf = st.data_editor(pd.DataFrame([json.loads(gptresponse)]))
                         st.write("Does this look okay?")
                         gptfood = json.loads(gptdf.to_json(orient="records"))[0]
                         if st.button(label="Confirm"):
-                            gptfood["User"]=st.session_state["authresult"][2]
+                            gptfood["User"]=st.session_state["username"]
                             ni.insert_one(gptfood)
                             st.write("Done!")
 
@@ -630,8 +597,8 @@ if st.session_state.get("authresult",(None,False,None))[1]:
                 aggregated_data_dict = aggregated_data.to_dict(orient="records")[0]
 
                 # Ensure session state has the required key for user authentication
-                if "authresult" in st.session_state and st.session_state["authresult"][2]:
-                    aggregated_data_dict["User"] = st.session_state["authresult"][2]
+                if "authentication_status" in st.session_state and st.session_state["username"]:
+                    aggregated_data_dict["User"] = st.session_state["username"]
 
                     # Insert into MongoDB
                     ni.insert_one(aggregated_data_dict)
@@ -676,7 +643,7 @@ if st.session_state.get("authresult",(None,False,None))[1]:
                     "Carbs": carbs,
                     "Protein": protein,
                     "Fiber": fiber,
-                    "User": st.session_state["authresult"][2]  # Add the current user
+                    "User": st.session_state["username"]  # Add the current user
                 }
 
                 # Insert the data into the MongoDB collection
