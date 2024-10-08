@@ -22,12 +22,12 @@ def init_client():
     return MongoClient(uri, server_api=ServerApi('1'))
 
 #toggle on for testing
-# from temp.keys import key, uri, imgur_client_id
+from temp.keys import key, uri, imgur_client_id
 
 # toggle on for production
-key = st.secrets["key"]
-uri = st.secrets["uri"]
-imgur_client_id = st.secrets["imgur_client_id"]
+# key = st.secrets["key"]
+# uri = st.secrets["uri"]
+# imgur_client_id = st.secrets["imgur_client_id"]
 
 #mongo
 client = init_client()
@@ -55,7 +55,6 @@ try:
 except LoginError as e:
     st.error(e)
 # st.write(st.session_state["authentication_status"])
-st.write(st.session_state["username"])
 if st.session_state.get("authentication_status"):
     past_data = list(nt.find({"User": st.session_state["username"]}).sort("Date", -1).limit(30))
     prd = pr.find()
@@ -91,7 +90,7 @@ if st.session_state.get("authentication_status"):
     #select quantity
     quantity=st.number_input(label="Quantity",min_value=-5000.1,placeholder=" ",value=None)
     #date
-    date=st.date_input(label="Date").strftime("%Y-%m-%d")
+    date=st.date_input(label="Date",value=datetime.datetime.now(pytz.timezone("US/Pacific"))).strftime("%Y-%m-%d")
 
     if st.button(label="Add"):
         if dropdown == " " or quantity==None:
