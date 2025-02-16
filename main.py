@@ -20,12 +20,12 @@ def init_client():
     return MongoClient(uri, server_api=ServerApi('1'))
 
 #toggle on for testing
-# from temp.keys import key, uri, imgur_client_id
+from temp.keys import key, uri, imgur_client_id
 
 # toggle on for production
-key = st.secrets["key"]
-uri = st.secrets["uri"]
-imgur_client_id = st.secrets["imgur_client_id"]
+# key = st.secrets["key"]
+# uri = st.secrets["uri"]
+# imgur_client_id = st.secrets["imgur_client_id"]
 
 #mongo
 client = init_client()
@@ -60,8 +60,9 @@ st.write("Time to get jacked")
 ntd = nt.find({"$and":[{"User":username},{"Date":{"$gt":str(datetime.datetime.strptime(today_date,"%Y-%m-%d")-datetime.timedelta(days=5))}}]})
 df = pd.DataFrame(list(ntd))
 df3 = df
-df3['Consumption'] = df3['Consumption'].astype(str)
-st.dataframe(df3.iloc[:, 1:].set_index('Date'))
+if 'Consumption' in df3:
+    df3['Consumption'] = df3['Consumption'].astype(str)
+    st.dataframe(df3.iloc[:, 1:].set_index('Date'))
 
 #select food
 nid = ni.find({"User":username})
