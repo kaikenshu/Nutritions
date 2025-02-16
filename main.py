@@ -180,7 +180,7 @@ def plot_progress(current_value, max_value, color, ax):
 # Example usage in Streamlit:
 st.write(" ")
 st.write("Daily Nutritional Progress")
-if not df[df['Date'] == today_date].empty:
+if 'Date' in df and not df[df['Date'] == today_date].empty:
     Calories_value = prdata.loc[prdata['Name'] == 'Preset', 'Calories'].values[0]
     protein_value = prdata.loc[prdata['Name'] == 'Preset', 'Protein'].values[0]
     Fiber_value = prdata.loc[prdata['Name'] == 'Preset', 'Fiber'].values[0]
